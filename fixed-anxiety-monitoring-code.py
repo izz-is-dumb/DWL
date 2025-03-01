@@ -457,8 +457,10 @@ MODEL_PATH = DOWNLOAD_DIR / "anxiety_prediction_model.joblib"
 SCALER_PATH = DOWNLOAD_DIR / "anxiety_scaler.joblib"
 
 # OpenAI API settings
-OPENAI_API_KEY = "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"  # Better to use environment variables
-USE_SLANG_TRANSLATION = True  # Flag to enable/disable slang translation
+OPENAI_API_KEY = "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"  
+#due to putting it on github, OpenAI has disabled the key currently as they think its been leaked, but inside our private env it works sorry :((((((((((((((( pls forgive us
+USE_SLANG_TRANSLATION = False  # Flag to enable/disable slang translation
+#set to false rn cause of the whole key disable problem
 
 # Keep track of already downloaded files
 downloaded_files = set()
