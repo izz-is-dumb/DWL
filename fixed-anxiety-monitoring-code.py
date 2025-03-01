@@ -1,4 +1,72 @@
-# **Function: Train Anxiety Prediction Model**
+# Initialize OpenAI client
+def initialize_openai_client():
+    """Initialize the OpenAI client with the API key"""
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        return client
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenAI client: {e}")
+        return None
+
+openai_client = None  # Will be initialized later
+
+# **Function: Translate Gen Z Slang**
+def translate_slang(text):
+    """
+    Translate Gen Z slang to standard English using OpenAI's API
+    
+    Parameters:
+        text (str): Text containing slang to translate
+        
+    Returns:
+        str: Translated text in standard English
+    """
+    global openai_client
+    
+    # If translation is disabled or text is empty, return as is
+    if not USE_SLANG_TRANSLATION or not text or text.strip() == "":
+        return text
+        
+    # Initialize client if needed
+    if openai_client is None:
+        openai_client = initialize_openai_client()
+        
+    if openai_client is None:
+        logger.warning("OpenAI client not available, skipping slang translation")
+        return text
+        
+    try:
+        logger.info("Translating slang in speech text...")
+        
+        # Create a backup of the original text
+        original_text = text
+        
+        # Request translation from OpenAI
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an AI that translates Gen Z slang into normal English."},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.3,  # Lower temperature for more consistent translations
+            max_tokens=1024   # Limit token usage
+        )
+        
+        # Extract the translated text
+        translated_text = response.choices[0].message.content
+        
+        # Log translation result if different
+        if translated_text != original_text:
+            logger.info(f"Slang translation changed text:\nOriginal: {original_text}\nTranslated: {translated_text}")
+        else:
+            logger.info("No slang detected in text")
+            
+        return translated_text
+        
+    except Exception as e:
+        logger.error(f"Slang translation failed: {e}")
+        # Return original text if translation fails
+        return text# **Function: Train Anxiety Prediction Model**
 def train_anxiety_prediction_model(df):
     """
     Train a linear regression model to predict anxiety levels
@@ -359,6 +427,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from datetime import datetime, timedelta
 import joblib
+import openai
 
 # Set up logging
 logging.basicConfig(
@@ -386,6 +455,10 @@ FIGURES_DIR = DOWNLOAD_DIR / "figures"
 FIGURES_DIR.mkdir(exist_ok=True)
 MODEL_PATH = DOWNLOAD_DIR / "anxiety_prediction_model.joblib"
 SCALER_PATH = DOWNLOAD_DIR / "anxiety_scaler.joblib"
+
+# OpenAI API settings
+OPENAI_API_KEY = "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"  # Better to use environment variables
+USE_SLANG_TRANSLATION = True  # Flag to enable/disable slang translation
 
 # Keep track of already downloaded files
 downloaded_files = set()
@@ -685,19 +758,17 @@ def analyze_emotions(text):
         all_detected_emotions = {}
         for item in results[0]:
             emotion_name = item['label'].capitalize()
+            # Scale up the emotion score to a more meaningful range (0-100%)
             emotion_score = item['score'] * 100  # Convert to percentage
             all_detected_emotions[emotion_name] = emotion_score
-            
-        # Make sure we have some non-zero values
-        has_meaningful_values = any(v > 1.0 for v in all_detected_emotions.values())
         
-        if not has_meaningful_values and all_detected_emotions:
-            # Scale up the highest values to make them more meaningful
-            max_val = max(all_detected_emotions.values())
-            if max_val > 0:
-                scaling_factor = 100.0 / max_val  # Scale highest to 100%
-                all_detected_emotions = {k: min(v * scaling_factor * 0.3, 100.0) for k, v in all_detected_emotions.items()}
-                logger.info(f"Applied emotion scaling factor: {scaling_factor}")
+        # Check if all values are very small
+        max_score = max(all_detected_emotions.values()) if all_detected_emotions else 0
+        if max_score < 5.0 and max_score > 0:
+            # Scale up the values while maintaining proportions
+            scaling_factor = 10.0  # Scale up at least 10x
+            all_detected_emotions = {k: v * scaling_factor for k, v in all_detected_emotions.items()}
+            logger.info(f"Scaled up emotion values by factor of {scaling_factor}")
             
         # Return only the emotions we're tracking
         return {emotion: all_detected_emotions.get(emotion, 0.0) for emotion in EMOTIONS_TO_TRACK}
@@ -1193,6 +1264,15 @@ def main():
     global anxiety_data
     
     logger.info("Firebase Storage monitoring started...")
+    
+    # Initialize OpenAI client if slang translation is enabled
+    global openai_client
+    if USE_SLANG_TRANSLATION:
+        openai_client = initialize_openai_client()
+        if openai_client:
+            logger.info("OpenAI client initialized for slang translation")
+        else:
+            logger.warning("Failed to initialize OpenAI client")
 
     # Load the list of already downloaded files
     load_downloaded_files()
